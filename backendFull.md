@@ -359,7 +359,7 @@ await db.payment.create({ data: { stripeEventId } });
 - For Anemi, the uploaded video is then encoded by FFmpeg into HLS. That work is slow, so it is not inside the upload request.
 - The API writes the luggage tag. The warehouse receives the suitcase. The factory, FFmpeg, opens it later.
 - careful: Trusting the file extension. Check the content type and a size limit, and keep uploads out of the public web root.
-- Anemi's upload and HLS encode. The image says S3. The idea is object storage. Name the store you actually use if they ask.
+- Anemi's upload and HLS encode use object storage. The common cloud name is S3. The idea is the same: store the file, then point the player at the playlist.
 - Why not multipart through Nest for a film?
 - The Node process becomes a pipe for gigabytes, and a timeout kills the upload. Direct-to-storage keeps the API small. Anemi can still accept an upload and encode it, but the encode is a job, not the request.
 
