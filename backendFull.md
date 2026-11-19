@@ -1,521 +1,590 @@
-# backend
+# Backend
 
-Revise this for a server viva. Same shape as the JavaScript notes: a fact, a piece of code, then homework.
+Study notes for this card. Same shape as the JavaScript notes: a fact, the mechanism, code you can type, a spoken answer, then homework.
 
-The three systems you can defend from work you shipped:
+Read one concept out loud. Close the file. Type the example. Answer the question without looking.
 
-- VMS, vms.arrobin.com. NestJS, Prisma, PostgreSQL, Redis, BullMQ, Socket.IO, JWT, TOTP
-- Anemi, anime.arrobin.com. NestJS, Prisma, Socket.IO, FFmpeg, HLS, JWT, TOTP. Anemi does not use Redis, BullMQ, or TanStack Query
-- Bracket, bracket.arrobin.com. NestJS, Prisma, Redis, BullMQ, Socket.IO, Stripe
+A line the play button covered on the photo is filled in here as the usual concept for that number.
 
-If they ask about GraphQL, gRPC, or Kafka, say you can explain them and you have not operated them.
+## 01 REST APIs
 
-## The three APIs in one minute
+- REST is a style for HTTP APIs where a URL names a thing, and the method says what to do with it.
 
-- a module groups a feature
-- a controller takes HTTP and calls a service
-- a service holds the rule and talks to Prisma
-- a guard decides if this caller may enter
-- the phone and the website call the same guard. Hiding a button is not a check
+- A resource is a noun: /port-calls/42, not /getPortCall.
+- GET reads and must not change data. POST creates. PUT replaces. PATCH changes a part. DELETE removes.
+- The server does not remember the client between calls. The token in the header is the memory.
+- Use plural nouns, nest only one level when you can, and return the new resource from POST.
 
-Say this: VMS recalculates laytime in a tested function, BullMQ runs it when a fact changes, Socket.IO updates the open screens. Anemi's live part is a Socket.IO room, and the video is FFmpeg. Bracket's bracket, standings, and Elo live in a tested package. Stripe tells us about payment through a webhook.
+```http
+GET /port-calls/42
+POST /port-calls
+PATCH /port-calls/42
+DELETE /port-calls/42
+```
 
-## REST
+Question. Why not one POST /api that does everything?
 
-- a resource is a noun. `/port-calls/42` is one port call
-- GET reads. POST creates. PATCH changes a part. DELETE removes
-- the server does not remember the client between requests. The token does
-- a body is JSON. A status code says what happened
+Say this. Because the client, the cache, and the logs can no longer tell a read from a write. GET can be cached and retried. A single doAction endpoint cannot.
 
-```ts
-@Controller("port-calls")
-export class PortCallsController {
-  constructor(private readonly portCalls: PortCallsService) {}
+Teach it. A URL is the name of a box. The method is the verb written on your hand. You do not rename the box for every verb.
 
-  @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.portCalls.findOne(id);
-  }
+The mistake. Putting verbs in the path, such as /createPortCall, and then also using POST. Pick the noun and let the method speak.
 
-  @Post()
-  create(@Body() body: unknown) {
-    return this.portCalls.create(body);
-  }
+On your CV. VMS and Bracket expose resource URLs. The OpenAPI file is the list of them.
+
+### homework
+
+- Close the page and answer out loud: Why not one POST /api that does everything?
+
+## 02 HTTP and status codes
+
+- The status code is the one-word result. The body is the explanation.
+
+- 2xx means it worked. 200 is a result, 201 is created, 204 is success with no body.
+- 400 is the client's fault in the shape of the request. 401 means not authenticated. 403 means authenticated but not allowed. 404 means not found.
+- 409 is a conflict, such as a duplicate name. 422 is a validation failure many APIs use. 429 is rate limited.
+- 500 is our bug. 502 and 504 are the proxy or the upstream timing out.
+
+```
+201 Created + the new port call
+401 when the JWT is missing
+403 when a viewer hits an operator route
+429 when the login counter passes the limit
+```
+
+Question. What is the difference between 401 and 403?
+
+Say this. 401: I do not know who you are, or the token failed. 403: I know who you are, and this role cannot do this. A viewer who is logged in and opens payroll gets 403, not 401.
+
+Teach it. 401 is the locked door with no key. 403 is the guard who looked at your badge and still said no.
+
+The mistake. Returning 200 with { success: false }. The code is part of the contract. Clients and monitors read it.
+
+On your CV. Your guards and the rate limiter already depend on 401, 403, and 429.
+
+### homework
+
+- Close the page and answer out loud: What is the difference between 401 and 403?
+
+## 03 GraphQL
+
+- GraphQL is one endpoint where the client names the fields it wants, instead of a fixed REST response.
+
+- The schema is types and queries. The client sends a query document.
+- Resolvers fetch each field. A naive resolver per field can query the database once per row. That is the N+1 problem.
+- A DataLoader batches those lookups by id in one round.
+- Mutations still change data. Queries should not.
+
+```typescript
+query {
+  portCall(id: "42") { vessel facts { kind at } }
 }
 ```
 
-Say this: the URL is the thing. The method is the action. The status code is the result.
+Question. When would you refuse GraphQL?
+
+Say this. When the screens are known and REST plus OpenAPI already generates the client, which is our case. GraphQL earns its place when many clients need different shapes of a large graph.
+
+Teach it. REST is a set menu. GraphQL is a buffet where the kitchen can still be overwhelmed if every guest asks the chef separately.
+
+The mistake. Solving N+1 by hoping. Show the DataLoader or a join.
+
+On your CV. You have not shipped GraphQL. Say that, then explain N+1 so they know you understand the cost.
 
 ### homework
 
-- write the four routes for a match: list, one, create, update the score
-- say which method each route uses
+- Close the page and answer out loud: When would you refuse GraphQL?
 
-## HTTP status codes
+## 04 gRPC
 
-- 200 OK, the read worked
-- 201 Created, the POST made a row
-- 204 No Content, the DELETE worked and there is nothing to return
-- 400 the client sent a bad shape
-- 401 there is no valid login
-- 403 the login is valid and this role may not do it
-- 404 the id is not there
-- 409 the unique rule failed, or the webhook was already stored
-- 422 the shape is fine and the business rule rejected it
-- 429 too many tries
-- 500 we broke. The client cannot fix it by changing the body
+- gRPC is a binary RPC style. You write a protobuf contract, and the tools generate the client and the server.
 
-Say this: 401 is "who are you". 403 is "I know you, and you may not".
+- Protobuf names the messages and the methods. The wire format is binary, smaller than JSON.
+- It runs on HTTP/2, so many calls can share a connection.
+- It fits service-to-service calls inside a network you control.
+- Browsers do not speak it comfortably without a proxy, so a public web app usually stays on JSON.
 
-### homework
-
-- a viewer opens `POST /port-calls`. Which status, and why is it not 401?
-- a second Stripe event with the same id. Which status do you lean toward, and what do you store?
-
-## NestJS
-
-- Nest is a structure on top of HTTP. Express is the library underneath
-- you declare a dependency in the constructor. Nest builds it. You do not call `new PrismaClient()` inside the method
-- a pipe validates or transforms the body
-- an interceptor wraps the handler for logging or mapping
-- an exception filter turns a thrown error into a status code
-- you test the service with a fake Prisma
-
-```ts
-@Injectable()
-export class PortCallsService {
-  constructor(private readonly db: PrismaService) {}
-
-  findOne(id: string) {
-    return this.db.portCall.findUniqueOrThrow({ where: { id } });
-  }
+```typescript
+service Laytime {
+  rpc Calculate (Facts) returns (Money);
 }
 ```
 
-Say this: Express is the pipe. Nest is the rooms in the building so the next person can find the laytime rule.
+Question. REST or gRPC between two of your own services?
+
+Say this. If both are ours and the call is hot, gRPC and a protobuf contract are stricter and faster. If a browser or a third party calls us, I keep JSON.
+
+Teach it. JSON is a letter anyone can read. Protobuf is a form both offices already printed.
+
+The mistake. Using gRPC for a public browser API and then being surprised by proxies and debugging.
+
+On your CV. You have not shipped gRPC. Your contract today is OpenAPI.
 
 ### homework
 
-- name controller, service, guard, and pipe, each in one line
-- say how you would test the service without a real database
+- Close the page and answer out loud: REST or gRPC between two of your own services?
 
-## GraphQL and gRPC
+## 05 Authentication with JWT
 
-- GraphQL is one endpoint. The client asks for the fields it wants. A resolver reads each field
-- the cost is complexity: one query can fan out into many database reads. You limit depth
-- gRPC is a typed binary RPC, often between your own services. The contract is a `.proto` file
-- I have not shipped either on VMS, Anemi, or Bracket. Our public APIs are HTTP and JSON, with OpenAPI on VMS
+- A JWT is a signed packet. The server can check it without a session table.
 
-Say this: I can draw a resolver and a proto. The systems I run are REST.
+- The token is header, payload, and signature. The payload is base64, not encrypted. Do not put secrets in it.
+- The server signs with a secret or a private key. Anyone can read the payload. Only the holder of the key can mint a valid signature.
+- Keep the access token short. Put the user id and roles in it. Check expiry on every request.
+- Store the refresh token hashed, and rotate it.
 
-### homework
-
-- one sentence on why a client might want GraphQL
-- one sentence on why you still shipped REST
-
-## JWT, bcrypt, and TOTP
-
-- the password is never stored. bcrypt hashes it with a salt and a cost
-- cost 12 is the figure to say. Higher cost is slower on purpose
-- login compares the hash. It does not decrypt the password. A hash is not reversible
-- an access token is a JWT, about 15 minutes, and it carries the user id and roles
-- the refresh token is long lived, stored as a hash, and rotated. Every refresh deletes the old one and writes a new one
-- if a stolen refresh token is used after rotation, revoke the whole family
-- TOTP is a six-digit code from an authenticator app. The server stores the secret encrypted
-- localStorage is readable by any script on the page. An XSS then becomes a long login. Rotation does not cure XSS. It limits a stolen refresh token to one use
-
-```ts
-import { hash, compare } from "bcrypt";
-
-const passwordHash = await hash(plain, 12);
-const ok = await compare(plain, passwordHash);
+```json
+header.payload.signature
+payload: { "sub": "user id", "roles": ["operator"], "exp": 1700000000 }
 ```
 
-Say this: hash the password, short access token, rotate the refresh token, TOTP for the second step.
+Question. Can I hide a password inside a JWT?
+
+Say this. No. The payload is only encoded. Anyone who copies the token can read it. Sign it, do not treat it as a vault.
+
+Teach it. The signature is a wax seal. The letter inside is still readable if someone steals it.
+
+The mistake. A token that lives for a year, or a token stored where every script can read it, with no rotation.
+
+On your CV. This is how VMS, Anemi, and Bracket sign users in.
 
 ### homework
 
-- say what you store for the password, the access token, and the refresh token
-- say what you do when a refresh token is reused
+- Close the page and answer out loud: Can I hide a password inside a JWT?
 
-## OAuth 2.0
+## 06 OAuth 2.0
 
-- OAuth is a way to let another site log the user in without taking their password
-- the authorization server issues a code, then your server trades the code for tokens
-- that trade happens on the server. The client secret does not go in the browser
-- we sign our own users in with email, password, and TOTP. OAuth is the pattern to explain if they ask about "login with Google"
+- OAuth is how a user lets your app act at another service without giving you their password.
 
-Say this: I have shipped our own JWT login. I have not put Google login on these three products. The part I would not get wrong is exchanging the code on the server.
+- The user is sent to the provider, such as Google. They approve a scope.
+- The provider redirects back with a code. The code is not the token.
+- Your server exchanges the code, with a client secret, for an access token.
+- That token is for the provider's API, not a replacement for your own session, until you decide to issue your own.
+
+```typescript
+browser -> Google consent
+Google -> your /callback?code=...
+server -> Google: code + client secret
+Google -> access token
+```
+
+Question. Why is the code exchange on the server?
+
+Say this. The client secret must not live in the browser. The authorisation code is also one-time, so a stolen redirect is less useful than a stolen long-lived token.
+
+Teach it. OAuth is a valet key. It starts the car for one garage. It is not the user's house key, and it is not your own JWT until you mint one.
+
+The mistake. Putting the client secret in a Next.js page. It belongs in the server environment.
+
+On your CV. You use your own JWT for the products. OAuth is the pattern if a later screen says Sign in with Google.
 
 ### homework
 
-- name the two servers: the one that shows the password page, and the one that receives the code
-- say where the client secret lives
+- Close the page and answer out loud: Why is the code exchange on the server?
 
-## Sessions, cookies, and CSRF
+## 07 Sessions and cookies
 
-- a session id in a cookie means the browser sends it on every request to that site
-- a header token that JavaScript must set is not sent on a cross-site form post
-- if the session is a cookie, set `HttpOnly`, `Secure`, and `SameSite`, and check a CSRF token on writes
-- CSRF is a site you are logged into being triggered by another site. The defense is the cookie policy plus a token the other site cannot read
+- A session is a row on the server. The cookie holds only the random id.
 
-Say this: cookie session needs CSRF protection. A bearer token in a header is not sent by a foreign form.
+- Login creates a session row and sets a cookie the browser will send back.
+- HttpOnly stops JavaScript from reading it. Secure means HTTPS only. SameSite blocks many cross-site posts.
+- The server looks up the id. Logging out deletes the row, and the cookie dies everywhere.
+- A JWT in a header is not sent automatically. A cookie is. That is why cookies need CSRF care.
+
+```http
+Set-Cookie: sid=random; HttpOnly; Secure; SameSite=Lax; Path=/
+```
+
+Question. Cookie session or JWT?
+
+Say this. A session is easy to revoke, because you delete the row. A JWT is easy to scale, because the API does not look up a session. We use short JWTs plus rotating refresh tokens, which is the middle: mostly stateless, with a revoke list for the refresh token.
+
+Teach it. The cookie is a coat-check ticket. The coat stays in our shop. A JWT is a signed note the guest carries.
+
+The mistake. A cookie without HttpOnly, or a session id that is the user id.
+
+On your CV. Know this so you can explain why CSRF shows up when someone suggests cookie login.
 
 ### homework
 
-- list the three cookie flags and one sentence each
-- say which of your apps is closer to a bearer token than to a cookie session
+- Close the page and answer out loud: Cookie session or JWT?
 
-## Prisma and a transaction
+## 08 Caching with Redis
 
-- the schema is the source of the tables
-- a migration is the SQL that changes production
-- `prisma generate` updates the client. You do not edit production by hand and hope the schema matches
-- a transaction commits several writes together, or none of them
-- creating a port call and its first statement-of-facts row is one transaction
+- A cache stores a computed answer so the next caller skips the slow work.
 
-```ts
-await db.$transaction(async (tx) => {
-  const call = await tx.portCall.create({ data: { vesselName, allowedHours } });
-  await tx.statementOfFacts.create({ data: { portCallId: call.id } });
-  return call;
+- Pick a key that includes every input, such as port-call:42.
+- Set a TTL so a stale value dies. Or delete the key when the row changes.
+- Cache-aside: read cache, on miss read the database, then fill the cache.
+- Do not cache a permission decision for long. Do not cache the only copy of the data.
+
+```typescript
+const hit = await redis.get(key);
+if (hit) return JSON.parse(hit);
+const row = await db.portCall.findUnique({ where: { id } });
+await redis.set(key, JSON.stringify(row), "EX", 30);
+```
+
+Question. What is a stampede?
+
+Say this. The key expires and a hundred requests all miss and all hit the database. A lock around the rebuild, or a slightly early refresh, lets one request refill the cache.
+
+Teach it. A cache is a photocopy on the desk. The filing cabinet is still the database. When the file changes, throw the photocopy away.
+
+The mistake. Caching a write, or caching without a TTL and then wondering why the screen is old.
+
+On your CV. Redis on VMS is the rate-limit counter and the BullMQ store. Say that before you claim a response cache.
+
+### homework
+
+- Close the page and answer out loud: What is a stampede?
+
+## 09 Message queues
+
+- A queue lets the HTTP request finish while slow work happens somewhere else.
+
+- The producer pushes a message. A consumer pulls it.
+- If the consumer crashes, the message returns and another worker can take it.
+- At-least-once delivery means you must tolerate duplicates. That is idempotency.
+- The queue is not a request-response API. The user is not waiting on that socket.
+
+```typescript
+await queue.add("email", { userId }, { attempts: 5, removeOnComplete: true });
+```
+
+Question. Why not just await the email inside the request?
+
+Say this. The user's screen then depends on the mail server. A queue keeps the request short and lets us retry the mail without the user clicking again.
+
+Teach it. A queue is a kitchen printer. The waiter does not cook the order while the guest watches.
+
+The mistake. Assuming the job runs once. Design the worker so a second run is harmless.
+
+On your CV. BullMQ recalculates laytime and runs Bracket background work.
+
+### homework
+
+- Close the page and answer out loud: Why not just await the email inside the request?
+
+## 10 Rate limiting
+
+- A rate limit caps how often a caller may hit a route, so one client cannot drown the API or guess passwords.
+
+- Choose the key: IP for login, user id for a signed-in route.
+- A fixed window counts hits until the TTL dies. It is simple and a bit unfair at the boundary.
+- A sliding window or a token bucket is smoother.
+- Return 429 and a Retry-After header. Do not return 500.
+
+```typescript
+const n = await redis.incr(`login:${ip}`);
+if (n === 1) await redis.expire(`login:${ip}`, 60);
+if (n > 10) throw new TooManyRequests();
+```
+
+Question. Where do you limit first?
+
+Say this. Login, password reset, and any route that sends mail or costs money. Then the public write routes. A high limit on a read of a public page is less urgent.
+
+Teach it. It is a door that only opens ten times a minute. The eleventh person gets a polite closed sign, not a broken door.
+
+The mistake. Limiting only in the React button. The attacker will not use your button.
+
+On your CV. VMS uses Redis-backed limits on the API.
+
+### homework
+
+- Close the page and answer out loud: Where do you limit first?
+
+## 11 WebSockets
+
+- A WebSocket is a connection that stays open so the server can push, instead of the browser asking every second.
+
+- The start is an HTTP upgrade. After that, both sides send frames.
+- You must authenticate on connect. A later message that says userId is not proof.
+- Rooms keep a message inside one watch session or one tournament.
+- Plan for reconnect. Phones drop. The client should resume with the last position.
+
+```typescript
+socket.on("playback", (msg) => apply(msg));
+```
+
+Question. Polling or WebSocket?
+
+Say this. Polling is fine for a screen that can be five seconds old. A shared video playhead cannot. Anemi uses Socket.IO, which prefers WebSocket and can fall back.
+
+Teach it. Polling is knocking. A socket is leaving the door open and talking.
+
+The mistake. Trusting the user id inside the event. Trust the handshake token.
+
+On your CV. Anemi watch rooms and Bracket live updates.
+
+### homework
+
+- Close the page and answer out loud: Polling or WebSocket?
+
+## 12 Background jobs
+
+- A background job is the unit of work on a queue: a name, a payload, and a retry policy.
+
+- Give the job a stable id when the work should not run twice in parallel.
+- Set attempts and backoff. A dead database for one second should not lose the laytime run.
+- Record failures. A job that fails forever needs a human, which is a dead-letter queue or a Sentry alert.
+- Keep the payload small. Pass the port call id, not the whole vessel history.
+
+```typescript
+{ jobId: `laytime:${id}`, attempts: 5, backoff: { type: "exponential", delay: 1000 } }
+```
+
+Question. What is a dead-letter queue?
+
+Say this. The place a message goes after the retries are spent. I can inspect it, fix the bug, and replay it. I do not silently drop the money calculation.
+
+Teach it. The job is a ticket with a number of tries written on it. When the tries run out, the ticket goes to the manager's spike, not the bin.
+
+The mistake. Putting the only copy of a file inside the job payload.
+
+On your CV. Laytime recalculation is this job.
+
+### homework
+
+- Close the page and answer out loud: What is a dead-letter queue?
+
+## 13 Webhooks
+
+- A webhook is their server calling your server when something happens.
+
+- You expose a URL. They POST a fact, such as a Stripe payment.
+- Verify a signature. Anyone can POST to a public URL.
+- Respond quickly with 2xx, and do the slow work on a queue.
+- Store the event id uniquely so a retry does not apply the payment twice.
+
+```typescript
+if (!stripe.webhooks.constructEvent(rawBody, signature, secret)) reject;
+await db.stripeEvent.create({ data: { id: event.id } }); // unique
+```
+
+Question. Why raw body for the signature?
+
+Say this. The signature is over the exact bytes. If the framework parses JSON and you stringify it again, the bytes change and a real Stripe event looks fake.
+
+Teach it. A webhook is a phone call from the bank. You check the caller id, you write the call in a book, and you do not credit the account twice because they called again.
+
+The mistake. Trusting the JSON without the signature.
+
+On your CV. Bracket's Stripe payments.
+
+### homework
+
+- Close the page and answer out loud: Why raw body for the signature?
+
+## 14 Idempotency
+
+- An idempotent operation can be repeated and the outcome stays the same as one success.
+
+- GET, PUT of a full document, and DELETE of an id are naturally close to idempotent.
+- POST is not, unless the client sends an Idempotency-Key and you store the first response.
+- Queue workers and webhooks need it because delivery is at least once.
+- A unique constraint is the honest version. A check-then-insert has a race.
+
+```typescript
+await db.payment.create({ data: { stripeEventId } });
+// second insert throws on the unique stripeEventId, and we return the first result
+```
+
+Question. Is increment idempotent?
+
+Say this. No. Doing it twice adds twice. Setting status to paid is idempotent. Adding one to a counter is not, unless you guard it with a unique event.
+
+Teach it. Pressing the lift button twice does not order two lifts. Pressing 'add one bag' twice does. Know which button you built.
+
+The mistake. A read of 'does this row exist' followed by an insert, with no unique key, under two parallel requests.
+
+On your CV. Stripe events and laytime job ids.
+
+### homework
+
+- Close the page and answer out loud: Is increment idempotent?
+
+## 15 File uploads
+
+- Do not stream a large file through your API process if you can hand the client a direct upload.
+
+- The browser asks the API for a signed upload URL.
+- The browser uploads the bytes to object storage. Our Node process does not hold the file.
+- The API is told the object key and checks the type and size.
+- For Anemi, the uploaded video is then encoded by FFmpeg into HLS. That work is slow, so it is not inside the upload request.
+
+```
+POST /uploads -> { url, key }
+PUT bytes to storage
+POST /videos { key } -> enqueue encode
+```
+
+Question. Why not multipart through Nest for a film?
+
+Say this. The Node process becomes a pipe for gigabytes, and a timeout kills the upload. Direct-to-storage keeps the API small. Anemi can still accept an upload and encode it, but the encode is a job, not the request.
+
+Teach it. The API writes the luggage tag. The warehouse receives the suitcase. The factory, FFmpeg, opens it later.
+
+The mistake. Trusting the file extension. Check the content type and a size limit, and keep uploads out of the public web root.
+
+On your CV. Anemi's upload and HLS encode. The image says S3. The idea is object storage. Name the store you actually use if they ask.
+
+### homework
+
+- Close the page and answer out loud: Why not multipart through Nest for a film?
+
+## 16 Pagination
+
+- Pagination returns a page, not the whole table.
+
+- Offset pagination is page and limit. It is easy, and it skips or repeats rows if someone inserts a row while you click.
+- Cursor pagination says 'after this id'. It is stable for a live feed.
+- Always cap the limit. A client who asks for a million rows is a bug or an attack.
+- Return the next cursor, or the total only if the count is cheap.
+
+```sql
+GET /port-calls?limit=20&after=clx123
+SELECT * FROM port_calls WHERE id < $cursor ORDER BY id DESC LIMIT 20;
+```
+
+Question. Which one for a vessel list?
+
+Say this. Offset is fine for an admin table with a page number. Cursor is better for an infinite mobile list that is also receiving new rows.
+
+Teach it. Offset is 'skip 40 chairs'. If someone sits down in front, you miss a chair. A cursor is 'the chair after this one'.
+
+The mistake. No maximum limit.
+
+On your CV. Both web tables and the Expo app need this. Do not return every port call.
+
+### homework
+
+- Close the page and answer out loud: Which one for a vessel list?
+
+## 17 API versioning
+
+- Versioning is how you change the contract without breaking the phone app that is already installed.
+
+- A path such as /v2 is obvious. A header is quieter and easier to miss.
+- Prefer adding fields over renaming them. Old clients ignore new fields.
+- Removing a field or changing a type is a new version.
+- The Expo binary in a pocket cannot be updated the same afternoon. The web can.
+
+```typescript
+/v1/port-calls still returns arrivedAt
+/v2/port-calls adds voyageId and keeps arrivedAt
+```
+
+Question. How do you avoid versions?
+
+Say this. Expand the contract. Add the new field, ship the new client, then stop reading the old field, then remove it. Breaking changes are the version you could not avoid.
+
+Teach it. It is a new edition of a form. People still have the old paper in a drawer.
+
+The mistake. Renaming vessel to shipName in the same day the app store build went out.
+
+On your CV. The generated OpenAPI client is the contract the web and the phone share.
+
+### homework
+
+- Close the page and answer out loud: How do you avoid versions?
+
+## 18 Input validation
+
+- Validation checks the shape and the business rule before the database sees the value.
+
+- Parse types, lengths, and enums at the edge. Zod or a Nest pipe.
+- Reject unknown fields if you are strict, so a client cannot set role: admin on a profile update.
+- Check the rule that needs the database in the service, such as 'this vessel is already alongside'.
+- Return the field errors, not a stack trace.
+
+```typescript
+const Body = z.object({ vessel: z.string().min(1).max(80) }).strict();
+```
+
+Question. Is the database check enough?
+
+Say this. The unique index is the last lock, and you still want it. The friendly error, and the check that does not belong in a constraint, live in the service. Do both.
+
+Teach it. The door policy is the pipe. The safe's own lock is the database constraint. Use both.
+
+The mistake. Validating only in the React form.
+
+On your CV. Zod and Nest pipes are on your CV.
+
+### homework
+
+- Close the page and answer out loud: Is the database check enough?
+
+## 19 Logging and monitoring
+
+- A log is a line about one event. A metric is a number over time. A trace is one request across services.
+
+- Log the request id, the user id, the route, and the error. Do not log the password, the token, or the full card number.
+- Sentry groups exceptions. Prometheus counts and times them. Grafana draws the counters.
+- An alert should mean a human might need to act, such as queue depth stuck high, or error rate up after a deploy.
+- Info for normal life, warn for odd, error for a failed job.
+
+```
+requestId=abc userId=12 route=POST /port-calls status=201 ms=40
+```
+
+Question. What do you open first when the site is slow?
+
+Say this. The duration graph and the queue depth. Then one slow trace or one slow SQL from the log. I do not start by reading a thousand info lines.
+
+Teach it. Logs are the diary. Metrics are the thermometer. Alerts are the person who shakes you when the thermometer is high.
+
+The mistake. Logging the Authorization header.
+
+On your CV. Sentry, Prometheus, and Grafana are on the VMS stack.
+
+### homework
+
+- Close the page and answer out loud: What do you open first when the site is slow?
+
+## 20 Unit and integration tests
+
+- A unit test calls one function with no network. An integration test checks that two real parts work together.
+
+- Laytime and Elo are units. They have no database.
+- An integration test can use Postgres and roll the transaction back.
+- Mock the edge, such as Stripe, not the function you are trying to trust.
+- A test that only asserts that a mock was called does not prove the money is right.
+
+```typescript
+test("early finish can pay despatch", () => {
+  const money = laytime({ allowedHours: 72, usedHours: 60, demurragePerDay: 15000 });
+  assert.equal(money.despatch, 3750);
 });
 ```
 
-```prisma
-model PortCall {
-  id            String   @id @default(cuid())
-  vesselName    String
-  allowedHours  Int
-  facts         StatementOfFacts[]
-}
-```
+Question. How many tests are enough?
 
-Say this: if the second insert fails, the port call must not remain.
+Say this. The pure rules that move money or rankings, the auth guards, and one happy path through the API. A hundred tests of getters are not a safety net.
 
-### homework
+Teach it. The unit test is weighing the flour before it goes in the cake. The integration test is tasting the cake.
 
-- name two writes that must commit together on Bracket. Example: the match result and the row that advances the winner
-- say what a migration is, in one sentence
+The mistake. Mocking Prisma in every test and never running a query.
 
-## Redis, cache, and rate limit
-
-- Redis is an in-memory data structure server
-- on VMS and Bracket it holds rate-limit counters and the BullMQ data
-- it is not the database of record. If Redis restarts, a user may get a fresh rate-limit window. Port calls are still in Postgres
-- Anemi does not use Redis
-
-```ts
-const key = `login:${ip}`;
-const hits = await redis.incr(key);
-if (hits === 1) await redis.expire(key, 60);
-if (hits > 10) throw new HttpException("Too many attempts", 429);
-```
-
-- a cache key names the thing and the version of the thing. When the row changes, delete the key or you serve a stale vessel name
-
-Say this: Redis counts and queues. Postgres remembers. Anemi has neither Redis nor a queue.
+On your CV. Anemi uses node:test. Bracket uses Vitest. Laytime is the example you write on the board.
 
 ### homework
 
-- write the key, the increment, and the 429 from memory
-- say what is lost if Redis is flushed, and what is not
+- Close the page and answer out loud: How many tests are enough?
 
-## Queues and background jobs
 
-- a request that recalculates laytime should not hold the HTTP call open if the work can run after the response
-- BullMQ puts a job in Redis. A worker process takes the job
-- the job id is stable so the same port call is not calculated twice in parallel: `laytime:${portCallId}`
-- if the worker throws, the job retries. The function must be safe to run again
-- Anemi does not use BullMQ. Encoding can be a process you start for that upload. Do not describe Anemi as a queue system
+## After the twenty: the systems you can defend
 
-```ts
-await queue.add(
-  "recalculate",
-  { portCallId },
-  { jobId: `laytime:${portCallId}` },
-);
-```
-
-Say this: HTTP returns. The worker runs the pure function. The job id stops a double run.
-
-### homework
-
-- give the job id for port call `pc_12`
-- say why the laytime function must return the same money if it runs twice on the same facts
-
-## WebSockets and Socket.IO
-
-- HTTP is the client asking. A socket is the server pushing a fact to a room
-- Socket.IO is that channel, with a long-polling fallback
-- a room is a group of sockets
-- Anemi: everyone in a watch session joins `watch:${sessionId}`
-- when one person seeks, the server broadcasts position and server time to that room
-- authenticate on the handshake from the JWT. Do not trust a user id inside the event body
-
-```ts
-io.use((socket, next) => {
-  const user = verifyAccessToken(socket.handshake.auth.token);
-  socket.data.userId = user.id;
-  next();
-});
-
-io.on("connection", (socket) => {
-  socket.on("watch:join", ({ sessionId }) => {
-    socket.join(`watch:${sessionId}`);
-  });
-
-  socket.on("playback:seek", ({ sessionId, position }) => {
-    socket.to(`watch:${sessionId}`).emit("playback", {
-      position,
-      serverTime: Date.now(),
-    });
-  });
-});
-```
-
-Say this: the room is the session. The token is checked when the socket connects. The event body is not the login.
-
-### homework
-
-- write the room name for session `s_9`
-- say which field a late joiner needs besides the position
-
-## Webhooks and idempotency
-
-- a webhook is another server calling yours because something already happened
-- Stripe signs the raw body. You verify that signature before you trust the JSON
-- Stripe may POST `payment_intent.succeeded` twice
-- doing the same operation twice must leave the same result as doing it once. That is idempotency
-- store the event id in a unique column. If the insert hits the unique rule, you have already applied it
-
-```ts
-const event = stripe.webhooks.constructEvent(rawBody, signature, secret);
-
-await db.stripeEvent.create({ data: { id: event.id } });
-// unique failure means we already handled this id
-```
-
-Say this: verify the signature on the raw body, then ignore an event id you have already stored.
-
-### homework
-
-- say what breaks if you parse JSON before you verify the signature
-- say what you store so the second delivery does not record the payment twice
-
-## File uploads
-
-- Anemi accepts a video. The file is not a JSON field
-- limit the size. Reject a type you do not transcode
-- store the object, then run FFmpeg to HLS. The browser plays a playlist, not the original file in one download
-- a playlist is a `.m3u8` file. Segments are short pieces. HLS.js fetches a few seconds at a time
-- WebVTT is the caption file
-
-```bash
-ffmpeg -i upload.mp4 -codec copy -start_number 0 -hls_time 6 -hls_list_size 0 -f hls stream.m3u8
-```
-
-Say this: the upload is the original. The player reads the playlist. Watch-together is the socket, not the codec.
-
-### homework
-
-- name the playlist extension and the caption format
-- say why one giant mp4 is a bad way to watch on a phone network
-
-## Pagination
-
-- do not return every port call in one array
-- offset pagination: `?page=2&limit=20`. Simple. A new row inserted at the top shifts the next page
-- cursor pagination: `?after=pc_20&limit=20`. Stable when rows are inserted during the scroll
-- always return the limit you used, and a cursor or a total if the screen needs it
-
-```ts
-const rows = await db.portCall.findMany({
-  take: limit,
-  skip: 1,
-  cursor: cursor ? { id: cursor } : undefined,
-  orderBy: { id: "asc" },
-});
-```
-
-Say this: I page the list. I use a cursor when the list is live and an offset when a person is jumping to page 4.
-
-### homework
-
-- which style fits a vessel table with a page number
-- which style fits an infinite scroll of matches
-
-## API versioning
-
-- a breaking change is one that makes an old client wrong: a renamed field, a removed field, a new required field
-- adding an optional field is usually safe
-- put the version in the path or the header, `/v1/port-calls`, and keep the old version until the phone app has moved
-- OpenAPI is the contract VMS generates a client from. Change the contract and regenerate. Do not let the website guess
-
-Say this: the phone app in the store cannot be updated the same afternoon. The old route has to keep working.
-
-### homework
-
-- is adding `notes?: string` a break?
-- is renaming `vesselName` to `name` a break?
-
-## Validation
-
-- validate at the edge of the service, in a pipe or with Zod
-- the database is the last line: unique, not null, foreign key
-- a type in TypeScript is gone at runtime
-
-```ts
-const CreatePortCall = z.object({
-  vesselName: z.string().min(1),
-  allowedHours: z.number().positive(),
-});
-```
-
-Say this: Zod rejects a bad body with 400. The unique index rejects a duplicate with 409.
-
-### homework
-
-- write the Zod object from memory
-- say which error is Zod and which error is Postgres
-
-## Logging and monitoring
-
-- a log line has a request id, the user id, and the error. It does not have the password, the refresh token, or the TOTP secret
-- Sentry receives the exception with a release id so you know which deploy broke
-- Prometheus scrapes numbers. Grafana draws them
-- a useful number is HTTP duration and queue depth. A chart nobody opens is not a monitor
-
-Say this: I can tell which release threw, and I can see the queue getting deep before users tell me.
-
-### homework
-
-- name two fields you will never log
-- name two numbers you would put on a Grafana board for VMS
-
-## Tests
-
-- a unit test calls a pure function. Laytime and Elo are unit tests
-- an integration test boots the module and hits the database, often in a transaction that rolls back
-- an end-to-end test drives the browser. Playwright is that tool
-- Vitest runs the Bracket unit tests
-- Anemi uses `node:test`, the built-in runner
-- say the runner that belongs to the product
-
-```ts
-import assert from "node:assert/strict";
-import { test } from "node:test";
-
-test("overrun pays demurrage", () => {
-  const money = laytime({ allowedHours: 72, usedHours: 84, demurragePerDay: 15000 });
-  assert.equal(money.demurrage, 7500);
-});
-```
-
-### homework
-
-- write that test from memory
-- say which runner belongs to Anemi and which belongs to Bracket
-
-## Laytime, with numbers
-
-- laytime is the time the contract allows to load or discharge
-- the clock starts when the notice of readiness is accepted, subject to the contract's exceptions
-- more time than allowed: the charterer pays demurrage to the owner
-- finished early: the owner may pay despatch to the charterer, only if the contract says so
-- your package is the pure calculation. BullMQ runs it when a fact changes. Socket.IO updates the screens
-
-Worked example. Allowed 72 hours. Notice accepted Monday 08:00. Finished Thursday 20:00. Elapsed 84 hours. Overrun 12 hours. Rate 15,000 dollars a day. 12 / 24 * 15,000 = 7,500 dollars demurrage.
-
-If they finished in 60 hours, time saved is 12 hours. Despatch is often half the demurrage rate, and only when that is the clause. Weather and weekends live in the tested package. Walk those tests. Do not invent a clause in the interview.
-
-```ts
-export function laytime(input: { allowedHours: number; usedHours: number; demurragePerDay: number }) {
-  const delta = input.usedHours - input.allowedHours;
-  const perHour = input.demurragePerDay / 24;
-  if (delta > 0) return { demurrage: delta * perHour, despatch: 0 };
-  // Half-rate despatch is an example clause. Apply it only when the contract says so.
-  return { demurrage: 0, despatch: Math.abs(delta) * perHour * 0.5 };
-}
-```
-
-### homework
-
-- recompute 72, 84, and 15,000 on paper
-- say the sentence about despatch before you mention the 0.5
-
-## Elo
-
-- expected score of A is `1 / (1 + 10 ^ ((Rb - Ra) / 400))`
-- A is 1500, B is 1700, K is 32, A wins
-- expected score of A is about 0.24
-- new rating is about 1500 + 32 * (1 - 0.24) = 1524
-- the scheduler and the standings live in the same tested package as this function
-
-```ts
-export function expected(ra: number, rb: number): number {
-  return 1 / (1 + 10 ** ((rb - ra) / 400));
-}
-
-export function nextRating(ra: number, rb: number, score: number, k = 32): number {
-  return ra + k * (score - expected(ra, rb));
-}
-```
-
-Say this: the upset is worth more. A 1500 beating a 1700 moves about 24 points at K = 32.
-
-### homework
-
-- compute the expected score on paper to one decimal
-- say what score you pass when A loses
-
-## RBAC
-
-- a role is a bundle of permissions
-- the guard reads the role from the verified token and compares it to the route
-- the Expo app and the Next.js app must ask the same API
-- if the phone hides a button and the API does not check, the phone is only a costume
-
-```ts
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("operator")
-@Post()
-create() {
-  return this.portCalls.create();
-}
-```
-
-### homework
-
-- 401 or 403: the token is missing
-- 401 or 403: the token is valid and the role is viewer
-
-## Delivery, in the words you need
-
-- Docker packages the process so the server matches the laptop
-- Compose starts the API, Postgres, and Redis on one network. Anemi's compose does not need Redis
-- nginx is the front door: TLS, the static build, and `/api` proxied to Nest
-- Caddy can do the same with automatic certificates. Anemi's notes include Caddy
-- PM2 keeps Node alive and restarts it
-- GitHub Actions runs tests on a pull request
-- inside Docker, `localhost` is the container, not the other service. Use the service name
-
-Say this: I have shipped nginx, PM2, Docker, Compose, and GitHub Actions. I have not operated a Kubernetes cluster. I can still explain a pod as a running container with a restart policy.
-
-### homework
-
-- say why `localhost` from the API container does not reach Postgres
-- name the tool that receives exceptions and the tool that draws metrics
-
-## A full spoken answer
-
-Question: walk me through a laytime change.
-
-Answer: the operator edits a fact. The API writes it in a transaction. It enqueues `laytime:` plus the port call id. The worker runs the pure function. 72 allowed and 84 used at 15,000 a day is 7,500 demurrage. Socket.IO tells the open screens. The unit test is why I trust the 7,500. Despatch at half rate only if the contract says so.
+- VMS uses NestJS, Prisma, PostgreSQL, Redis, BullMQ, and Socket.IO. A laytime change is a transaction, then a job id `laytime:` plus the port call id, then a socket update.
+- Worked number. Allowed 72 hours, used 84, rate 15,000 dollars a day. Overrun is 12 hours. Demurrage is 7,500 dollars. Half-rate despatch only if the contract says so.
+- Anemi uses NestJS, Prisma, Socket.IO, and FFmpeg. It does not use Redis, BullMQ, or TanStack Query. The room is `watch:` plus the session id. The playlist is HLS.
+- Bracket uses NestJS, Prisma, Redis, BullMQ, Socket.IO, and Stripe. Verify the webhook on the raw body. Store the event id once. Elo: 1500 beats 1700 at K = 32 and moves to about 1524.
+- Say what you have operated. GraphQL, gRPC, and Kafka are explanations, not systems you have run.
 
 ## Homework for the whole file
 
-1. Draw HTTP, BullMQ, Postgres, and Socket.IO as four boxes for VMS. Cross out the boxes Anemi does not have.
-2. Write the bcrypt line, the rate-limit counter, and the laytime test from memory.
-3. Explain 401 and 403 with one viewer and one missing token.
-4. Verify a Stripe event in words: raw body, signature, unique event id.
+1. Read the twenty titles out loud with the file closed.
+2. Pick three and write the example from memory.
+3. Teach one concept to an empty chair in under a minute.
